@@ -1,44 +1,93 @@
-import tensorflow.keras
+import cv2
 import numpy as np
-import cv2 as cv
 
-TM_DATA = None
-model = None
-cap = None
-ret = None
-frame = None
-predictionVariable = None
-key = None
+"""
+@article{yolov3,
+  title={YOLOv3: An Incremental Improvement},
+  author={Redmon, Joseph and Farhadi, Ali},
+  journal = {arXiv},
+  year={2018}
+}
 
+press esc to terminate the program
+model: YOLOv3-416 weight can be downloaded: https://pjreddie.com/darknet/yolo/
+"""
 
-print('START')
-# Disable scientific notation for clarity
-np.set_printoptions(suppress=True)
+net = cv2.dnn.readNet('yolov3.weights', 'yolov3.cfg')
+classes = []
+with open('coco.names', 'r') as f:
+    classes = f.read().splitlines()
 
-# Load the model
-model = tensorflow.keras.models.load_model('keras_model.h5')
+cap = cv2.VideoCapture(0)
 
-# Create the array of the right shape to feed into the keras model
-# The 'length' or number of images you can put into the array is
-# determined by the first position in the shape tuple, in this case 1.
-TM_DATA = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
-cap = cv.VideoCapture(0)
+# frame = cv2.imread('image.jpg')
+
 while True:
-  ret , frame = cap.read()
-  cv.imshow('Window',frame)
-  frame = cv.resize(frame, (224, 224))
-  image_array = np.asarray(frame)
-  # Normalize the image
-  normalized_image_array = (image_array.astype(np.float32) / 127.0) - 1
-  # Load the image into the array
-  TM_DATA[0] = normalized_image_array
-  predictionVariable = model.predict(TM_DATA)
-  print('prediction')
-  print(predictionVariable)
-  key = cv.waitKey(2000)
-  if key == (ord('q')):
-    break
-cv.destroyAllWindows()
-cap.release()
-print('TNE END')
+    _, frame = cap.read()
+    height, width, _ = frame.shape
 
+    blob = cv2.dnn.blobFromImage(frame, 1 / 255, (416, 416), (0, 0, 0), swapRB=True, crop=False)
+
+    net.setInput(blob)
+
+    output_layers_names = net.getUnconnectedOutLayersNames()
+    layerOutputs = net.forward(output_layers_names)
+
+    bounding_boxes = []
+    confidences = []
+    class_ids = []
+
+    # first four elements in the output are bounding box coordinates
+    # from 5th element on are scores
+    for output in layerOutputs:
+        for detection in output:
+            # store all detections for different classes
+            scores = detection[5:]
+            # the classes that has is the most likely
+            class_id = np.argmax(scores)
+            # extract the max scores
+            confidence = scores[class_id]
+
+            if confidence > 0.5:
+                # center coordinate of the detected object
+                center_x = int(detection[0] * width)
+                center_y = int(detection[1] * height)
+
+                # width and height of the bounding box
+                w = int(detection[2] * width)
+                h = int(detection[3] * height)
+
+                # position of the upper corner
+                x = int(center_x - w / 2)
+                y = int(center_y - h / 2)
+
+                bounding_boxes.append([x, y, w, h])
+                confidences.append((float(confidence)))
+                class_ids.append(class_id)
+
+    # keep the most probable boxes because we can have more than 1 box for the same object (?)
+    indexes = cv2.dnn.NMSBoxes(bounding_boxes, confidences, 0.5, 0.4)
+
+    font = cv2.FONT_HERSHEY_PLAIN
+    colors = np.random.uniform(0, 255, size=(len(bounding_boxes), 3))
+
+    # display bounding box on the image
+    if len(indexes) > 0:
+        for i in indexes.flatten():
+            x, y, w, h = bounding_boxes[i]
+            label = str(classes[class_ids[i]])
+            confidence = str(round(confidences[i], 2))
+            color = colors[i]
+            # create rectangle
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            # font, 2, (255, 255, 255) , 2 => size 2, colour white, thickness 2
+            cv2.putText(frame, label + " " + confidence, (x, y + 20), font, 2, (255, 255, 255), 2)
+
+    cv2.imshow('Image', frame)
+    # press esc to terminate
+    key = cv2.waitKey(1)
+    if key == 27:
+        break
+
+cap.relaease()
+cv2.destroyAllWindows()
