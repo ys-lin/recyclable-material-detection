@@ -1,19 +1,7 @@
 import cv2
 import numpy as np
 
-"""
-@article{yolov3,
-  title={YOLOv3: An Incremental Improvement},
-  author={Redmon, Joseph and Farhadi, Ali},
-  journal = {arXiv},
-  year={2018}
-}
-
-press esc to terminate the program
-model: YOLOv3-416 weight can be downloaded: https://pjreddie.com/darknet/yolo/
-"""
-
-net = cv2.dnn.readNet('yolov3.weights', 'yolov3.cfg')
+net = cv2.dnn.readNet('yolov4-obj_final.weights', 'yolov4-obj.cfg')
 classes = []
 with open('coco.names', 'r') as f:
     classes = f.read().splitlines()
